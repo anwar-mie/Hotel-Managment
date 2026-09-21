@@ -1,0 +1,17 @@
+{
+  "name": "prisma",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@prisma/client": "6",
+    "dotenv": "^18.0.1",
+    "prisma": "6"
+  }
+}
