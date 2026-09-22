@@ -9,6 +9,7 @@ import { RoomTypesModule } from './module/room-types/room-types.module.js';
 import { RoomsModule } from './module/rooms/rooms.module.js';
 import { GuestsModule } from './module/guests/guests.module.js';
 import { ReservationsModule } from './module/reservations/reservations.module.js';
+import { BillingModule } from './module/billing/billing.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 
@@ -24,6 +25,7 @@ import { RolesGuard } from './common/guards/roles.guard.js';
     RoomsModule,
     GuestsModule,
     ReservationsModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [
