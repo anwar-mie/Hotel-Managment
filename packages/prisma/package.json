@@ -5,11 +5,16 @@
   "exports": {
     ".": "./index.ts"
   },
+  "prisma": {
+    "seed": "bun run prisma/seed.ts"
+  },
   "scripts": {
     "generate": "prisma generate",
-    "validate": "prisma validate"
+    "validate": "prisma validate",
+    "seed": "bun run prisma/seed.ts"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/bun": "latest"
   },
   "peerDependencies": {
@@ -17,6 +22,7 @@
   },
   "dependencies": {
     "@prisma/client": "6",
+    "bcryptjs": "^2.4.3",
     "dotenv": "^18.0.1",
     "prisma": "6"
   }
