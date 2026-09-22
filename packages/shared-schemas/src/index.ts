@@ -4,3 +4,4 @@ export * from './room.schema.js';
 export * from './guest.schema.js';
 export * from './reservation.schema.js';
 export * from './billing.schema.js';
+export * from './operations.schema.js';
