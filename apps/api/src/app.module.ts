@@ -7,6 +7,8 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { AuthModule } from './module/auth/auth.module.js';
 import { RoomTypesModule } from './module/room-types/room-types.module.js';
 import { RoomsModule } from './module/rooms/rooms.module.js';
+import { GuestsModule } from './module/guests/guests.module.js';
+import { ReservationsModule } from './module/reservations/reservations.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 
@@ -20,6 +22,8 @@ import { RolesGuard } from './common/guards/roles.guard.js';
     AuthModule,
     RoomTypesModule,
     RoomsModule,
+    GuestsModule,
+    ReservationsModule,
   ],
   controllers: [AppController],
   providers: [
