@@ -59,16 +59,23 @@ export function NewReservationModal({
     try {
       const [rtRes, gRes] = await Promise.all([
         api.get<IRoomType[]>("/room-types"),
-        api.get<IGuest[]>("/guests"),
+        api.get<any>("/guests"),
       ]);
-      setRoomTypes(rtRes.data);
-      if (rtRes.data.length > 0 && !selectedRoomTypeId) {
-        const firstRt = rtRes.data[0];
+      const rtList = Array.isArray(rtRes.data)
+        ? rtRes.data
+        : (rtRes.data as any)?.data || [];
+      const guestsList = Array.isArray(gRes.data)
+        ? gRes.data
+        : (gRes.data as any)?.data || [];
+
+      setRoomTypes(rtList);
+      if (rtList.length > 0 && !selectedRoomTypeId) {
+        const firstRt = rtList[0];
         if (firstRt) setSelectedRoomTypeId(firstRt.id);
       }
-      setGuests(gRes.data);
-      if (gRes.data.length > 0 && !selectedGuestId) {
-        const firstG = gRes.data[0];
+      setGuests(guestsList);
+      if (guestsList.length > 0 && !selectedGuestId) {
+        const firstG = guestsList[0];
         if (firstG) setSelectedGuestId(firstG.id);
       }
     } catch (err) {
@@ -77,7 +84,7 @@ export function NewReservationModal({
   };
 
   // Calculate nights and estimated total
-  const selectedRoomType = roomTypes.find((rt) => rt.id === selectedRoomTypeId);
+  const selectedRoomType = (Array.isArray(roomTypes) ? roomTypes : []).find((rt) => rt.id === selectedRoomTypeId);
   const nights = Math.max(
     1,
     Math.round(
@@ -206,7 +213,7 @@ export function NewReservationModal({
               onChange={(e) => setSelectedGuestId(e.target.value)}
               className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
             >
-              {guests.map((g) => (
+              {(Array.isArray(guests) ? guests : []).map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.firstName} {g.lastName} ({g.email || "No email"})
                 </option>
@@ -219,7 +226,7 @@ export function NewReservationModal({
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-800">Room Category</label>
           <div className="grid grid-cols-2 gap-2">
-            {roomTypes.map((rt) => {
+            {(Array.isArray(roomTypes) ? roomTypes : []).map((rt) => {
               const isSelected = selectedRoomTypeId === rt.id;
               return (
                 <button

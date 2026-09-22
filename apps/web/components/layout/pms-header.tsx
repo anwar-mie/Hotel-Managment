@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Plus, Sparkles, AlertCircle, CheckCircle2, BedDouble, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import type { IRoomStats } from "shared-types";
 
 interface PmsHeaderProps {
@@ -12,10 +13,12 @@ interface PmsHeaderProps {
 }
 
 export function PmsHeader({ onOpenNewBooking, onRefresh }: PmsHeaderProps) {
+  const { user } = useAuth();
   const [stats, setStats] = useState<IRoomStats | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchStats = async () => {
+    if (!user) return;
     try {
       setLoading(true);
       const res = await api.get<IRoomStats>("/rooms/stats");
@@ -28,10 +31,12 @@ export function PmsHeader({ onOpenNewBooking, onRefresh }: PmsHeaderProps) {
   };
 
   useEffect(() => {
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (user) {
+      fetchStats();
+      const interval = setInterval(fetchStats, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   const handleRefresh = () => {
     fetchStats();

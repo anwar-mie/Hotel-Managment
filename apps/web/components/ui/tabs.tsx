@@ -3,6 +3,21 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+interface TabsContextType {
+  value: string;
+  onValueChange: (val: string) => void;
+}
+
+const TabsContext = React.createContext<TabsContextType | undefined>(undefined);
+
+function useTabs() {
+  const context = React.useContext(TabsContext);
+  if (!context) {
+    throw new Error("Tabs components must be used within a <Tabs> parent");
+  }
+  return context;
+}
+
 interface TabsProps {
   value: string;
   onValueChange: (value: string) => void;
@@ -12,27 +27,20 @@ interface TabsProps {
 
 export function Tabs({ value, onValueChange, children, className }: TabsProps) {
   return (
-    <div className={cn("flex flex-col space-y-4", className)}>
-      {React.Children.map(children, (child) => {
-        if (React.isValidElement(child)) {
-          return React.cloneElement(child as any, { activeValue: value, onValueChange });
-        }
-        return child;
-      })}
-    </div>
+    <TabsContext.Provider value={{ value, onValueChange }}>
+      <div className={cn("flex flex-col space-y-4", className)}>
+        {children}
+      </div>
+    </TabsContext.Provider>
   );
 }
 
 export function TabsList({
   children,
   className,
-  activeValue,
-  onValueChange,
 }: {
   children: React.ReactNode;
   className?: string;
-  activeValue?: string;
-  onValueChange?: (val: string) => void;
 }) {
   return (
     <div
@@ -41,12 +49,7 @@ export function TabsList({
         className
       )}
     >
-      {React.Children.map(children, (child) => {
-        if (React.isValidElement(child)) {
-          return React.cloneElement(child as any, { activeValue, onValueChange });
-        }
-        return child;
-      })}
+      {children}
     </div>
   );
 }
@@ -55,20 +58,18 @@ export function TabsTrigger({
   value,
   children,
   className,
-  activeValue,
-  onValueChange,
 }: {
   value: string;
   children: React.ReactNode;
   className?: string;
-  activeValue?: string;
-  onValueChange?: (val: string) => void;
 }) {
+  const { value: activeValue, onValueChange } = useTabs();
   const isActive = activeValue === value;
+
   return (
     <button
       type="button"
-      onClick={() => onValueChange?.(value)}
+      onClick={() => onValueChange(value)}
       className={cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900",
         isActive
@@ -84,15 +85,14 @@ export function TabsTrigger({
 
 export function TabsContent({
   value,
-  activeValue,
   children,
   className,
 }: {
   value: string;
-  activeValue?: string;
   children: React.ReactNode;
   className?: string;
 }) {
+  const { value: activeValue } = useTabs();
   if (value !== activeValue) return null;
   return <div className={cn("mt-2 ring-offset-white", className)}>{children}</div>;
 }
