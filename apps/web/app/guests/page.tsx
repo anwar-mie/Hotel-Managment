@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { api, getErrorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { IGuest, IdentificationType } from "shared-types";
 
@@ -44,8 +45,9 @@ export default function GuestsPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get<IGuest[]>("/guests");
-      setGuests(res.data);
+      const res = await api.get<any>("/guests");
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      setGuests(list);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -53,9 +55,13 @@ export default function GuestsPage() {
     }
   };
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    fetchGuests();
-  }, []);
+    if (user) {
+      fetchGuests();
+    }
+  }, [user]);
 
   const handleCreateGuest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +94,7 @@ export default function GuestsPage() {
     }
   };
 
-  const filteredGuests = guests.filter((g) => {
+  const filteredGuests = (Array.isArray(guests) ? guests : []).filter((g) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const fullName = `${g.firstName} ${g.lastName}`.toLowerCase();

@@ -23,6 +23,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Modal } from "@/components/ui/modal";
 import { api, getErrorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/utils";
 import type {
   IRoom,
@@ -58,10 +59,14 @@ export default function OperationsPage() {
         api.get<IMaintenanceRequest[]>("/operations/maintenance/requests"),
       ]);
 
-      setRooms(roomsRes.data);
+      setRooms(Array.isArray(roomsRes.data) ? roomsRes.data : []);
       setHkDashboard(dashRes.data);
-      setTasks(tasksRes.data);
-      setMaintenanceTickets(maintRes.data);
+      setTasks(Array.isArray(tasksRes.data) ? tasksRes.data : (tasksRes.data as any)?.data || []);
+      setMaintenanceTickets(
+        Array.isArray(maintRes.data)
+          ? maintRes.data
+          : (maintRes.data as any)?.data || []
+      );
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -69,9 +74,13 @@ export default function OperationsPage() {
     }
   };
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    fetchOperationsData();
-  }, []);
+    if (user) {
+      fetchOperationsData();
+    }
+  }, [user]);
 
   const handleUpdateRoomHousekeeping = async (
     roomId: string,

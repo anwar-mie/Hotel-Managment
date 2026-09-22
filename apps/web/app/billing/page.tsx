@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { api, getErrorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type {
   IInvoice,
@@ -60,9 +61,9 @@ export default function BillingPage() {
         api.get<IService[]>("/billing/services"),
       ]);
 
-      setInvoices(invRes.data);
+      setInvoices(Array.isArray(invRes.data) ? invRes.data : (invRes.data as any)?.data || []);
       setSummary(sumRes.data);
-      setServices(servRes.data);
+      setServices(Array.isArray(servRes.data) ? servRes.data : (servRes.data as any)?.data || []);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -70,9 +71,13 @@ export default function BillingPage() {
     }
   };
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    fetchBillingData();
-  }, []);
+    if (user) {
+      fetchBillingData();
+    }
+  }, [user]);
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,7 +104,7 @@ export default function BillingPage() {
     }
   };
 
-  const filteredInvoices = invoices.filter((inv) => {
+  const filteredInvoices = (Array.isArray(invoices) ? invoices : []).filter((inv) => {
     if (statusFilter !== "ALL" && inv.status !== statusFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();

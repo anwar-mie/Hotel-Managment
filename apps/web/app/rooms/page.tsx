@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { api, getErrorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatCurrency } from "@/lib/utils";
 import type { IRoom, IRoomType, FrontDeskStatus, HousekeepingStatus } from "shared-types";
 
@@ -59,9 +60,13 @@ export default function RoomsPage() {
     }
   };
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    fetchRoomsData();
-  }, []);
+    if (user) {
+      fetchRoomsData();
+    }
+  }, [user]);
 
   const handleUpdateStatus = async (e: React.FormEvent) => {
     e.preventDefault();

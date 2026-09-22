@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Modal } from "@/components/ui/modal";
 import { NewReservationModal } from "@/components/modals/new-reservation-modal";
 import { api, getErrorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { IReservation, IRoom } from "shared-types";
 
@@ -69,8 +70,14 @@ export default function FrontDeskPage() {
           params: { frontDeskStatus: "VACANT", housekeepingStatus: "CLEAN" },
         }),
       ]);
-      setReservations(resRes.data);
-      setAvailableRooms(roomsRes.data);
+      const resList = Array.isArray(resRes.data)
+        ? resRes.data
+        : (resRes.data as any)?.data || [];
+      const roomsList = Array.isArray(roomsRes.data)
+        ? roomsRes.data
+        : (roomsRes.data as any)?.data || [];
+      setReservations(resList);
+      setAvailableRooms(roomsList);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -78,11 +85,15 @@ export default function FrontDeskPage() {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const { user } = useAuth();
 
-  const filteredReservations = reservations.filter((res) => {
+  useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
+  const filteredReservations = (Array.isArray(reservations) ? reservations : []).filter((res) => {
     const q = searchQuery.toLowerCase();
     const guestFullName = res.booker
       ? `${res.booker.firstName} ${res.booker.lastName}`.toLowerCase()
@@ -112,8 +123,7 @@ export default function FrontDeskPage() {
 
     try {
       setIsCheckingIn(true);
-      await api.post("/reservations/check-in", {
-        reservationStayId: checkInTarget.stayId,
+      await api.post(`/reservations/stays/${checkInTarget.stayId}/check-in`, {
         roomId: selectedRoomId,
       });
       setCheckInTarget(null);
@@ -132,8 +142,7 @@ export default function FrontDeskPage() {
 
     try {
       setIsCheckingOut(true);
-      await api.post("/reservations/check-out", {
-        reservationStayId: checkOutTarget.stayId,
+      await api.post(`/reservations/stays/${checkOutTarget.stayId}/check-out`, {
         notes: `Checked out at Front Desk. Payment settled via ${settleMethod}.`,
       });
       setCheckOutTarget(null);
@@ -350,7 +359,7 @@ export default function FrontDeskPage() {
                 className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
               >
                 <option value="">-- Choose Vacant Clean Room --</option>
-                {availableRooms.map((r) => (
+                {(Array.isArray(availableRooms) ? availableRooms : []).map((r) => (
                   <option key={r.id} value={r.id}>
                     Room #{r.number} (Floor {r.floor} • {r.roomType?.name})
                   </option>

@@ -25,6 +25,7 @@ import { Card } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { NewReservationModal } from "@/components/modals/new-reservation-modal";
 import { api, getErrorMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { IRoom, ICalendarStayItem, IRoomType } from "shared-types";
 
@@ -75,9 +76,13 @@ export default function TapeChartPage() {
         }),
       ]);
 
-      setRooms(roomsRes.data);
-      setRoomTypes(typesRes.data);
-      setCalendarStays(calendarRes.data);
+      setRooms(Array.isArray(roomsRes.data) ? roomsRes.data : []);
+      setRoomTypes(Array.isArray(typesRes.data) ? typesRes.data : []);
+      setCalendarStays(
+        Array.isArray(calendarRes.data)
+          ? calendarRes.data
+          : (calendarRes.data as any)?.data || []
+      );
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -85,9 +90,13 @@ export default function TapeChartPage() {
     }
   };
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    fetchRoomsAndGrid();
-  }, [startDate]);
+    if (user) {
+      fetchRoomsAndGrid();
+    }
+  }, [startDate, user]);
 
   // Generate 8-day column headers
   const days: Date[] = [];
@@ -110,7 +119,7 @@ export default function TapeChartPage() {
   };
 
   // Filter rooms
-  const filteredRooms = rooms.filter((r) => {
+  const filteredRooms = (Array.isArray(rooms) ? rooms : []).filter((r) => {
     if (floorFilter !== "ALL" && r.floor !== floorFilter) return false;
     if (typeFilter !== "ALL" && r.roomTypeId !== typeFilter) return false;
     if (searchQuery) {
