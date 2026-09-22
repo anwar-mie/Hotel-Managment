@@ -55,6 +55,39 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function isJwtExpired(tokenStr: string): boolean {
+  try {
+    const payloadBase64 = tokenStr.split(".")[1];
+    if (!payloadBase64) return true;
+    const base64 = payloadBase64.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const parsed = JSON.parse(jsonPayload);
+    if (parsed.exp && parsed.exp * 1000 < Date.now()) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function setAuthCookie(token: string) {
+  if (typeof document !== "undefined") {
+    document.cookie = `aura_token=${encodeURIComponent(token)}; path=/; max-age=86400; SameSite=Lax`;
+  }
+}
+
+function clearAuthCookie() {
+  if (typeof document !== "undefined") {
+    document.cookie = "aura_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<IAuthUser | null>(null);
   const [tokens, setTokens] = useState<IAuthTokens | null>(null);
@@ -66,12 +99,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const storedTokens = localStorage.getItem("aura_tokens");
       const storedUser = localStorage.getItem("aura_user");
       if (storedTokens && storedUser) {
-        setTokens(JSON.parse(storedTokens));
-        setUser(JSON.parse(storedUser));
+        const parsedTokens: IAuthTokens = JSON.parse(storedTokens);
+        if (parsedTokens?.accessToken && !isJwtExpired(parsedTokens.accessToken)) {
+          setTokens(parsedTokens);
+          setUser(JSON.parse(storedUser));
+          setAuthCookie(parsedTokens.accessToken);
+        } else {
+          // Token expired or invalid
+          localStorage.removeItem("aura_tokens");
+          localStorage.removeItem("aura_user");
+          clearAuthCookie();
+          setTokens(null);
+          setUser(null);
+        }
+      } else {
+        clearAuthCookie();
       }
     } catch {
       localStorage.removeItem("aura_tokens");
       localStorage.removeItem("aura_user");
+      clearAuthCookie();
     } finally {
       setIsLoading(false);
     }
@@ -90,6 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       localStorage.setItem("aura_user", JSON.stringify(authedUser));
       localStorage.setItem("aura_tokens", JSON.stringify(authTokens));
+      setAuthCookie(authTokens.accessToken);
     } catch (err) {
       throw new Error(getErrorMessage(err));
     }
@@ -100,6 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTokens(null);
     localStorage.removeItem("aura_user");
     localStorage.removeItem("aura_tokens");
+    clearAuthCookie();
   };
 
   const switchPersona = async (persona: DemoPersona) => {

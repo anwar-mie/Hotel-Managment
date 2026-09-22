@@ -37,10 +37,13 @@ api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
-      // If unauthorized and not already on /login, could trigger redirect or token refresh
       const isLogin = window.location.pathname === "/login";
       if (!isLogin && !window.location.pathname.startsWith("/login")) {
-        console.warn("Unauthorized access - token may have expired.");
+        console.warn("Session expired or unauthorized - redirecting to /login.");
+        localStorage.removeItem("aura_tokens");
+        localStorage.removeItem("aura_user");
+        document.cookie = "aura_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+        window.location.href = "/login";
       }
     }
     return Promise.reject(error);
