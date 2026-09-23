@@ -53,6 +53,11 @@ api.interceptors.response.use(
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as any;
+    if (data?.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+      return data.errors
+        .map((e: any) => (e.field ? `${e.field}: ${e.message}` : e.message))
+        .join(", ");
+    }
     if (data?.message) {
       if (Array.isArray(data.message)) {
         return data.message.join(", ");

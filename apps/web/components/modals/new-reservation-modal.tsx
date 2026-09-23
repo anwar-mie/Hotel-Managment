@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { api, getErrorMessage } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import type { IRoomType, IGuest } from "shared-types";
-import { CheckCircle2, UserPlus, Users, Calendar, Sparkles } from "lucide-react";
+import { CheckCircle2, UserPlus, Users, Calendar, Sparkles, AlertCircle } from "lucide-react";
 
 interface NewReservationModalProps {
   isOpen: boolean;
@@ -15,6 +15,18 @@ interface NewReservationModalProps {
   onSuccess: () => void;
   defaultRoomTypeId?: string;
   defaultCheckIn?: string;
+}
+
+function getNextDay(dateString: string): string {
+  if (!dateString) return "";
+  const parts = dateString.split("-").map(Number);
+  if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+    const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + 1));
+    return d.toISOString().split("T")[0] || "";
+  }
+  const d = new Date(dateString);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split("T")[0] || "";
 }
 
 export function NewReservationModal({
@@ -31,9 +43,8 @@ export function NewReservationModal({
 
   // Date selection
   const today = new Date().toISOString().split("T")[0] || "";
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0] || "";
   const [checkInDate, setCheckInDate] = useState(defaultCheckIn || today);
-  const [checkOutDate, setCheckOutDate] = useState(tomorrow);
+  const [checkOutDate, setCheckOutDate] = useState(() => getNextDay(defaultCheckIn || today));
   const [adultCount, setAdultCount] = useState(1);
   const [childCount, setChildCount] = useState(0);
 
@@ -51,7 +62,14 @@ export function NewReservationModal({
     if (isOpen) {
       fetchInitialData();
       if (defaultRoomTypeId) setSelectedRoomTypeId(defaultRoomTypeId);
-      if (defaultCheckIn) setCheckInDate(defaultCheckIn);
+      if (defaultCheckIn) {
+        setCheckInDate(defaultCheckIn);
+        setCheckOutDate(getNextDay(defaultCheckIn));
+      } else {
+        const t = new Date().toISOString().split("T")[0] || "";
+        setCheckInDate(t);
+        setCheckOutDate(getNextDay(t));
+      }
     }
   }, [isOpen, defaultRoomTypeId, defaultCheckIn]);
 
@@ -61,10 +79,10 @@ export function NewReservationModal({
         api.get<IRoomType[]>("/room-types"),
         api.get<any>("/guests"),
       ]);
-      const rtList = Array.isArray(rtRes.data)
+      const rtList: IRoomType[] = Array.isArray(rtRes.data)
         ? rtRes.data
         : (rtRes.data as any)?.data || [];
-      const guestsList = Array.isArray(gRes.data)
+      const guestsList: IGuest[] = Array.isArray(gRes.data)
         ? gRes.data
         : (gRes.data as any)?.data || [];
 
@@ -83,35 +101,48 @@ export function NewReservationModal({
     }
   };
 
-  // Calculate nights and estimated total
-  const selectedRoomType = (Array.isArray(roomTypes) ? roomTypes : []).find((rt) => rt.id === selectedRoomTypeId);
-  const nights = Math.max(
-    1,
-    Math.round(
-      (new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) /
-        (1000 * 60 * 60 * 24)
-    )
+  const handleCheckInChange = (newInDate: string) => {
+    setCheckInDate(newInDate);
+    if (!checkOutDate || checkOutDate <= newInDate) {
+      setCheckOutDate(getNextDay(newInDate));
+    }
+  };
+
+  // Calculate nights and validation
+  const checkInMs = new Date(checkInDate).getTime();
+  const checkOutMs = new Date(checkOutDate).getTime();
+  const isDateRangeValid = !isNaN(checkInMs) && !isNaN(checkOutMs) && checkOutMs > checkInMs;
+  const rawNights = isDateRangeValid
+    ? Math.round((checkOutMs - checkInMs) / (1000 * 60 * 60 * 24))
+    : 0;
+  const nights = Math.max(1, rawNights);
+
+  const selectedRoomType = (Array.isArray(roomTypes) ? roomTypes : []).find(
+    (rt) => rt.id === selectedRoomTypeId
   );
   const estimatedTotal = selectedRoomType ? Number(selectedRoomType.basePrice) * nights : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
     try {
+      if (!isDateRangeValid) {
+        throw new Error("Check-out date must be after check-in date.");
+      }
+
       let finalGuestId = selectedGuestId;
 
       // Create new guest if toggled
       if (isCreatingNewGuest) {
-        if (!newGuestFirstName || !newGuestLastName) {
+        if (!newGuestFirstName.trim() || !newGuestLastName.trim()) {
           throw new Error("Guest first and last name are required.");
         }
         const guestRes = await api.post<IGuest>("/guests", {
-          firstName: newGuestFirstName,
-          lastName: newGuestLastName,
-          email: newGuestEmail || undefined,
-          phone: newGuestPhone || undefined,
+          firstName: newGuestFirstName.trim(),
+          lastName: newGuestLastName.trim(),
+          email: newGuestEmail.trim() || undefined,
+          phone: newGuestPhone.trim() || undefined,
         });
         finalGuestId = guestRes.data.id;
       }
@@ -120,18 +151,23 @@ export function NewReservationModal({
         throw new Error("Please select or create a guest profile.");
       }
       if (!selectedRoomTypeId) {
-        throw new Error("Please select a room type.");
+        throw new Error("Please select a room category.");
       }
+
+      setLoading(true);
+
+      const inIso = new Date(`${checkInDate}T12:00:00.000Z`).toISOString();
+      const outIso = new Date(`${checkOutDate}T12:00:00.000Z`).toISOString();
 
       await api.post("/reservations", {
         bookerGuestId: finalGuestId,
         stays: [
           {
             roomTypeId: selectedRoomTypeId,
-            checkInDate: new Date(checkInDate).toISOString(),
-            checkOutDate: new Date(checkOutDate).toISOString(),
-            adults: Number(adultCount),
-            children: Number(childCount),
+            checkInDate: inIso,
+            checkOutDate: outIso,
+            adults: Number(adultCount) || 1,
+            children: Number(childCount) || 0,
           },
         ],
       });
@@ -155,8 +191,9 @@ export function NewReservationModal({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-            {error}
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+            <span>{error}</span>
           </div>
         )}
 
@@ -178,7 +215,7 @@ export function NewReservationModal({
           </div>
 
           {isCreatingNewGuest ? (
-            <div className="grid grid-cols-1 gap-2 pt-1">
+            <div className="space-y-2 pt-1">
               <div className="grid grid-cols-2 gap-2">
                 <Input
                   placeholder="First Name (e.g. Eleanor)"
@@ -213,6 +250,9 @@ export function NewReservationModal({
               onChange={(e) => setSelectedGuestId(e.target.value)}
               className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
             >
+              {!selectedGuestId && (
+                <option value="">-- Choose Existing Guest --</option>
+              )}
               {(Array.isArray(guests) ? guests : []).map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.firstName} {g.lastName} ({g.email || "No email"})
@@ -259,28 +299,35 @@ export function NewReservationModal({
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
               <Calendar className="h-3 w-3 text-slate-400" />
-              <span>Check-in</span>
+              <span>Check-in Date</span>
             </label>
             <Input
               type="date"
               value={checkInDate}
-              onChange={(e) => setCheckInDate(e.target.value)}
+              onChange={(e) => handleCheckInChange(e.target.value)}
               required
             />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
               <Calendar className="h-3 w-3 text-slate-400" />
-              <span>Check-out ({nights} nights)</span>
+              <span>Check-out Date ({isDateRangeValid ? `${rawNights} nights` : "Invalid"})</span>
             </label>
             <Input
               type="date"
+              min={getNextDay(checkInDate)}
               value={checkOutDate}
               onChange={(e) => setCheckOutDate(e.target.value)}
               required
             />
           </div>
         </div>
+
+        {!isDateRangeValid && (
+          <div className="text-[11px] text-rose-600 font-medium">
+            * Check-out date must be at least 1 day after check-in date.
+          </div>
+        )}
 
         {/* Guest Occupants */}
         <div className="grid grid-cols-2 gap-3">
@@ -332,7 +379,12 @@ export function NewReservationModal({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="gold" disabled={loading} className="gap-1.5 font-semibold">
+          <Button
+            type="submit"
+            variant="gold"
+            disabled={loading || !isDateRangeValid}
+            className="gap-1.5 font-semibold"
+          >
             <CheckCircle2 className="h-4 w-4" />
             <span>{loading ? "Confirming..." : "Confirm Reservation"}</span>
           </Button>
