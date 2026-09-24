@@ -48,6 +48,9 @@ export default function FrontDeskPage() {
     reservation: IReservation;
     stayId: string;
     roomTypeId: string;
+    roomTypeName: string;
+    currentRoomId?: string;
+    currentRoomNumber?: string;
     guestName: string;
   } | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState("");
@@ -300,10 +303,19 @@ export default function FrontDeskPage() {
                             size="sm"
                             onClick={() => {
                               if (stay) {
+                                const reservedTypeId = stay.roomTypeId;
+                                const preAllocatedRoomId = stay.roomId || stay.room?.id;
+                                const matchingClean = (Array.isArray(availableRooms) ? availableRooms : []).find(
+                                  (r) => r.id === preAllocatedRoomId || r.roomTypeId === reservedTypeId
+                                );
+                                setSelectedRoomId(matchingClean ? matchingClean.id : preAllocatedRoomId || "");
                                 setCheckInTarget({
                                   reservation: res,
                                   stayId: stay.id,
                                   roomTypeId: stay.roomTypeId,
+                                  roomTypeName: stay.roomType?.name || (stay.room as any)?.roomType?.name || "Standard Category",
+                                  currentRoomId: preAllocatedRoomId,
+                                  currentRoomNumber: stay.room?.number,
                                   guestName,
                                 });
                               }
@@ -357,57 +369,116 @@ export default function FrontDeskPage() {
       </div>
 
       {/* Check-In Modal */}
-      {checkInTarget && (
-        <Modal
-          isOpen={Boolean(checkInTarget)}
-          onClose={() => setCheckInTarget(null)}
-          title="Guest Check-In"
-          description={`Assign physical room & check in ${checkInTarget.guestName}`}
-        >
-          <form onSubmit={handleExecuteCheckIn} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-800">
-                Select Available Clean Room
-              </label>
-              <select
-                value={selectedRoomId}
-                onChange={(e) => setSelectedRoomId(e.target.value)}
-                required
-                className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
-              >
-                <option value="">-- Choose Vacant Clean Room --</option>
-                {(Array.isArray(availableRooms) ? availableRooms : []).map((r) => (
-                  <option key={r.id} value={r.id}>
-                    Room #{r.number} (Floor {r.floor} • {r.roomType?.name})
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-slate-500">
-                Only inspected/clean vacant rooms are eligible for assignment.
-              </p>
-            </div>
+      {checkInTarget && (() => {
+        const matchingCleanRooms = (Array.isArray(availableRooms) ? availableRooms : []).filter(
+          (r) => r.roomTypeId === checkInTarget.roomTypeId
+        );
+        const otherCleanRooms = (Array.isArray(availableRooms) ? availableRooms : []).filter(
+          (r) => r.roomTypeId !== checkInTarget.roomTypeId
+        );
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCheckInTarget(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="emerald"
-                disabled={isCheckingIn || !selectedRoomId}
-                className="gap-1.5 font-semibold text-xs"
-              >
-                <LogIn className="h-4 w-4" />
-                <span>{isCheckingIn ? "Checking In..." : "Confirm Check-In"}</span>
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
+        return (
+          <Modal
+            isOpen={Boolean(checkInTarget)}
+            onClose={() => setCheckInTarget(null)}
+            title="Guest Check-In"
+            description={`Assign physical room & check in ${checkInTarget.guestName}`}
+          >
+            <form onSubmit={handleExecuteCheckIn} className="space-y-4">
+              {/* Reserved Room Category Indicator */}
+              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 font-medium">Reserved Room Type:</span>
+                  <span className="font-bold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-md text-[11px]">
+                    {checkInTarget.roomTypeName}
+                  </span>
+                </div>
+                {checkInTarget.currentRoomNumber && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">Pre-Allocated Room:</span>
+                    <span className="font-semibold text-slate-800 flex items-center gap-1">
+                      <BedDouble className="h-3.5 w-3.5 text-amber-700" />
+                      <span>Room #{checkInTarget.currentRoomNumber}</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-800">
+                    Assign Physical Room
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {matchingCleanRooms.length} {checkInTarget.roomTypeName} available
+                  </span>
+                </div>
+
+                <select
+                  value={selectedRoomId}
+                  onChange={(e) => setSelectedRoomId(e.target.value)}
+                  required
+                  className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+                >
+                  <option value="">-- Choose Physical Room --</option>
+                  
+                  {matchingCleanRooms.length > 0 && (
+                    <optgroup label={`★ Matching Category: ${checkInTarget.roomTypeName} (${matchingCleanRooms.length} Clean)`}>
+                      {matchingCleanRooms.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          Room #{r.number} (Floor {r.floor} • {r.roomType?.name || checkInTarget.roomTypeName})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {otherCleanRooms.length > 0 && (
+                    <optgroup label={`Other Available Categories (${otherCleanRooms.length} Clean - Upgrade/Override)`}>
+                      {otherCleanRooms.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          Room #{r.number} (Floor {r.floor} • {r.roomType?.name})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+
+                {matchingCleanRooms.length === 0 && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-800 flex items-start gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Notice: No clean <strong>{checkInTarget.roomTypeName}</strong> rooms are currently vacant. You can assign an available room from another category as an upgrade or expedite room turnover in Operations.
+                    </span>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-slate-400">
+                  Only clean/inspected vacant rooms can be assigned for check-in.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCheckInTarget(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="emerald"
+                  disabled={isCheckingIn || !selectedRoomId}
+                  className="gap-1.5 font-semibold text-xs"
+                >
+                  <LogIn className="h-4 w-4" />
+                  <span>{isCheckingIn ? "Checking In..." : "Confirm Check-In"}</span>
+                </Button>
+              </div>
+            </form>
+          </Modal>
+        );
+      })()}
 
       {/* Check-Out Modal */}
       {checkOutTarget && (
