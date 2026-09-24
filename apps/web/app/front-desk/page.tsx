@@ -25,8 +25,10 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Modal } from "@/components/ui/modal";
 import { NewReservationModal } from "@/components/modals/new-reservation-modal";
+import { AccessDenied } from "@/components/layout/access-denied";
 import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { hasPermission, canCreateReservation, canCheckInCheckOut } from "@/lib/rbac";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { IReservation, IRoom } from "shared-types";
 
@@ -88,10 +90,14 @@ export default function FrontDeskPage() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user) {
+    if (user && hasPermission(user.role, "frontDesk")) {
       fetchData();
+    } else if (user) {
+      setLoading(false);
     }
   }, [user]);
+
+  const isAuthorized = hasPermission(user?.role, "frontDesk");
 
   const filteredReservations = (Array.isArray(reservations) ? reservations : []).filter((res) => {
     const q = searchQuery.toLowerCase();
@@ -165,28 +171,37 @@ export default function FrontDeskPage() {
         />
 
         <main className="flex-1 p-6 space-y-5">
-          {/* Header & Title */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-                <BellRing className="h-5 w-5 text-amber-700" />
-                <span>Front Desk Operations</span>
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Expedited guest check-ins, keycard issuance, active stay management & check-out folios
-              </p>
-            </div>
+          {!isAuthorized ? (
+            <AccessDenied
+              moduleName="Front Desk Operations"
+              allowedRolesDescription="Front Desk Receptionists, Hotel Managers, and System Administrators"
+            />
+          ) : (
+            <>
+              {/* Header & Title */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                    <BellRing className="h-5 w-5 text-amber-700" />
+                    <span>Front Desk Operations</span>
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Expedited guest check-ins, keycard issuance, active stay management & check-out folios
+                  </p>
+                </div>
 
-            <Button
-              onClick={() => setIsNewBookingOpen(true)}
-              variant="gold"
-              size="sm"
-              className="font-semibold gap-1.5 shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Walk-in / New Booking</span>
-            </Button>
-          </div>
+                {canCreateReservation(user?.role) && (
+                  <Button
+                    onClick={() => setIsNewBookingOpen(true)}
+                    variant="gold"
+                    size="sm"
+                    className="font-semibold gap-1.5 shadow-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Walk-in / New Booking</span>
+                  </Button>
+                )}
+              </div>
 
           {/* Quick Search */}
           <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs flex items-center gap-3">
@@ -336,6 +351,8 @@ export default function FrontDeskPage() {
               )}
             </div>
           </Tabs>
+          </>
+          )}
         </main>
       </div>
 

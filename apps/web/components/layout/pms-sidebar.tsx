@@ -19,43 +19,58 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth, DEMO_PERSONAS, DemoPersona } from "@/lib/auth-context";
 import { Badge } from "@/components/ui/badge";
+import { hasPermission, getRoleBadgeInfo, PermissionKey } from "@/lib/rbac";
 
-const NAV_ITEMS = [
+interface NavItemConfig {
+  label: string;
+  href: string;
+  icon: any;
+  description: string;
+  permission: PermissionKey;
+}
+
+const NAV_ITEMS: NavItemConfig[] = [
   {
     label: "Tape Chart",
     href: "/",
     icon: CalendarDays,
     description: "Visual Room & Stay Grid",
+    permission: "tapeChart",
   },
   {
     label: "Front Desk",
     href: "/front-desk",
     icon: BellRing,
     description: "Arrivals, Stays & Check-ins",
+    permission: "frontDesk",
   },
   {
     label: "Rooms & Inventory",
     href: "/rooms",
     icon: Building2,
     description: "Status & Floor Directory",
+    permission: "rooms",
   },
   {
     label: "Operations",
     href: "/operations",
     icon: Sparkles,
     description: "Housekeeping & Maintenance",
+    permission: "operations",
   },
   {
     label: "Billing & Folios",
     href: "/billing",
     icon: Receipt,
     description: "Invoices, Payments & Folios",
+    permission: "billing",
   },
   {
     label: "Guest Directory",
     href: "/guests",
     icon: Users,
     description: "Profiles & Stay Histories",
+    permission: "guests",
   },
 ];
 
@@ -63,6 +78,11 @@ export function PmsSidebar() {
   const pathname = usePathname();
   const { user, logout, switchPersona } = useAuth();
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
+  const roleInfo = getRoleBadgeInfo(user?.role);
+
+  const visibleNavItems = NAV_ITEMS.filter((item) =>
+    hasPermission(user?.role, item.permission)
+  );
 
   return (
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-slate-200/80 bg-white shadow-sm">
@@ -88,7 +108,7 @@ export function PmsSidebar() {
           Property Management
         </div>
 
-        {NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const isActive =
             pathname === item.href ||

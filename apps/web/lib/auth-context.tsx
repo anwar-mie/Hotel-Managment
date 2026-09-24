@@ -78,7 +78,7 @@ function isJwtExpired(tokenStr: string): boolean {
 
 function setAuthCookie(token: string) {
   if (typeof document !== "undefined") {
-    document.cookie = `aura_token=${encodeURIComponent(token)}; path=/; max-age=86400; SameSite=Lax`;
+    document.cookie = `aura_token=${encodeURIComponent(token)}; path=/; max-age=2592000; SameSite=Lax`;
   }
 }
 
@@ -94,34 +94,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load persisted session on client mount
-    try {
-      const storedTokens = localStorage.getItem("aura_tokens");
-      const storedUser = localStorage.getItem("aura_user");
-      if (storedTokens && storedUser) {
-        const parsedTokens: IAuthTokens = JSON.parse(storedTokens);
-        if (parsedTokens?.accessToken && !isJwtExpired(parsedTokens.accessToken)) {
-          setTokens(parsedTokens);
-          setUser(JSON.parse(storedUser));
-          setAuthCookie(parsedTokens.accessToken);
+    const initSession = async () => {
+      try {
+        const storedTokens = localStorage.getItem("aura_tokens");
+        const storedUser = localStorage.getItem("aura_user");
+        if (storedTokens && storedUser) {
+          const parsedTokens: IAuthTokens = JSON.parse(storedTokens);
+          const parsedUser: IAuthUser = JSON.parse(storedUser);
+
+          if (parsedTokens?.accessToken && !isJwtExpired(parsedTokens.accessToken)) {
+            setTokens(parsedTokens);
+            setUser(parsedUser);
+            setAuthCookie(parsedTokens.accessToken);
+          } else if (parsedTokens?.refreshToken) {
+            // Silently refresh expired access token using refreshToken
+            try {
+              const res = await api.post<IAuthTokens>("/auth/refresh", {
+                refreshToken: parsedTokens.refreshToken,
+              });
+              const newTokens = res.data;
+              setTokens(newTokens);
+              setUser(parsedUser);
+              localStorage.setItem("aura_tokens", JSON.stringify(newTokens));
+              setAuthCookie(newTokens.accessToken);
+            } catch {
+              localStorage.removeItem("aura_tokens");
+              localStorage.removeItem("aura_user");
+              clearAuthCookie();
+              setTokens(null);
+              setUser(null);
+            }
+          } else {
+            localStorage.removeItem("aura_tokens");
+            localStorage.removeItem("aura_user");
+            clearAuthCookie();
+            setTokens(null);
+            setUser(null);
+          }
         } else {
-          // Token expired or invalid
-          localStorage.removeItem("aura_tokens");
-          localStorage.removeItem("aura_user");
           clearAuthCookie();
-          setTokens(null);
-          setUser(null);
         }
-      } else {
+      } catch {
+        localStorage.removeItem("aura_tokens");
+        localStorage.removeItem("aura_user");
         clearAuthCookie();
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      localStorage.removeItem("aura_tokens");
-      localStorage.removeItem("aura_user");
-      clearAuthCookie();
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    initSession();
   }, []);
 
   const login = async (email: string, password: string = "password123") => {

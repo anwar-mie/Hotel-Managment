@@ -22,8 +22,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Modal } from "@/components/ui/modal";
+import { AccessDenied } from "@/components/layout/access-denied";
 import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { hasPermission } from "@/lib/rbac";
 import { formatDate } from "@/lib/utils";
 import type {
   IRoom,
@@ -77,10 +79,14 @@ export default function OperationsPage() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user) {
+    if (user && hasPermission(user.role, "operations")) {
       fetchOperationsData();
+    } else if (user) {
+      setLoading(false);
     }
   }, [user]);
+
+  const isAuthorized = hasPermission(user?.role, "operations");
 
   const handleUpdateRoomHousekeeping = async (
     roomId: string,
@@ -102,7 +108,13 @@ export default function OperationsPage() {
     status: "IN_PROGRESS" | "COMPLETED"
   ) => {
     try {
-      await api.patch(`/operations/housekeeping/tasks/${taskId}`, { status });
+      if (status === "IN_PROGRESS") {
+        await api.post(`/operations/housekeeping/tasks/${taskId}/start`);
+      } else {
+        await api.post(`/operations/housekeeping/tasks/${taskId}/complete`, {
+          notes: "Task marked completed via Operations Board",
+        });
+      }
       fetchOperationsData();
     } catch (err) {
       alert(getErrorMessage(err));
@@ -111,9 +123,8 @@ export default function OperationsPage() {
 
   const handleResolveMaintenance = async (ticketId: string) => {
     try {
-      await api.patch(`/operations/maintenance/requests/${ticketId}`, {
-        status: "RESOLVED",
-        resolutionNotes: "Repaired and returned to turnover turnover queue.",
+      await api.post(`/operations/maintenance/requests/${ticketId}/resolve`, {
+        resolutionNotes: "Repaired and returned to turnover queue.",
       });
       fetchOperationsData();
     } catch (err) {
@@ -152,28 +163,35 @@ export default function OperationsPage() {
         <PmsHeader onRefresh={fetchOperationsData} />
 
         <main className="flex-1 p-6 space-y-5">
-          {/* Header & Title */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-amber-600" />
-                <span>Housekeeping & Maintenance Operations</span>
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Room sanitation oversight, inspection workflows, turnover task queue & defect tickets
-              </p>
-            </div>
+          {!isAuthorized ? (
+            <AccessDenied
+              moduleName="Housekeeping & Maintenance Operations"
+              allowedRolesDescription="Housekeeping & Maintenance Staff, Receptionists, Hotel Managers, and Administrators"
+            />
+          ) : (
+            <>
+              {/* Header & Title */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-amber-600" />
+                    <span>Housekeeping & Maintenance Operations</span>
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Room sanitation oversight, inspection workflows, turnover task queue & defect tickets
+                  </p>
+                </div>
 
-            <Button
-              onClick={() => setIsNewMaintOpen(true)}
-              variant="outline"
-              size="sm"
-              className="font-semibold gap-1.5 shadow-xs border-rose-200 text-rose-700 hover:bg-rose-50"
-            >
-              <Wrench className="h-4 w-4" />
-              <span>Report Defect / Ticket</span>
-            </Button>
-          </div>
+                <Button
+                  onClick={() => setIsNewMaintOpen(true)}
+                  variant="outline"
+                  size="sm"
+                  className="font-semibold gap-1.5 shadow-xs border-rose-200 text-rose-700 hover:bg-rose-50"
+                >
+                  <Wrench className="h-4 w-4" />
+                  <span>Report Defect / Ticket</span>
+                </Button>
+              </div>
 
           {/* Quick Metrics Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -456,6 +474,8 @@ export default function OperationsPage() {
               </div>
             </TabsContent>
           </Tabs>
+          </>
+          )}
         </main>
       </div>
 

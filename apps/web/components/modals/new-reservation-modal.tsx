@@ -6,14 +6,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, getErrorMessage } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
-import type { IRoomType, IGuest } from "shared-types";
-import { CheckCircle2, UserPlus, Users, Calendar, Sparkles, AlertCircle } from "lucide-react";
+import type { IRoomType, IGuest, IRoom } from "shared-types";
+import {
+  CheckCircle2,
+  UserPlus,
+  Users,
+  Calendar,
+  Sparkles,
+  AlertCircle,
+  Building2,
+  LogIn,
+} from "lucide-react";
 
 interface NewReservationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   defaultRoomTypeId?: string;
+  defaultRoomId?: string;
+  defaultRoomNumber?: string;
   defaultCheckIn?: string;
 }
 
@@ -34,12 +45,17 @@ export function NewReservationModal({
   onClose,
   onSuccess,
   defaultRoomTypeId,
+  defaultRoomId,
+  defaultRoomNumber,
   defaultCheckIn,
 }: NewReservationModalProps) {
   const [roomTypes, setRoomTypes] = useState<IRoomType[]>([]);
+  const [rooms, setRooms] = useState<IRoom[]>([]);
   const [guests, setGuests] = useState<IGuest[]>([]);
   const [selectedGuestId, setSelectedGuestId] = useState("");
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState(defaultRoomTypeId || "");
+  const [selectedRoomId, setSelectedRoomId] = useState(defaultRoomId || "");
+  const [checkInImmediately, setCheckInImmediately] = useState(false);
 
   // Date selection
   const today = new Date().toISOString().split("T")[0] || "";
@@ -62,6 +78,7 @@ export function NewReservationModal({
     if (isOpen) {
       fetchInitialData();
       if (defaultRoomTypeId) setSelectedRoomTypeId(defaultRoomTypeId);
+      if (defaultRoomId) setSelectedRoomId(defaultRoomId);
       if (defaultCheckIn) {
         setCheckInDate(defaultCheckIn);
         setCheckOutDate(getNextDay(defaultCheckIn));
@@ -71,13 +88,14 @@ export function NewReservationModal({
         setCheckOutDate(getNextDay(t));
       }
     }
-  }, [isOpen, defaultRoomTypeId, defaultCheckIn]);
+  }, [isOpen, defaultRoomTypeId, defaultRoomId, defaultCheckIn]);
 
   const fetchInitialData = async () => {
     try {
-      const [rtRes, gRes] = await Promise.all([
-        api.get<IRoomType[]>("/room-types"),
-        api.get<any>("/guests"),
+      const [rtRes, gRes, roomsRes] = await Promise.all([
+        api.get<IRoomType[]>("/room-types").catch(() => ({ data: [] })),
+        api.get<any>("/guests").catch(() => ({ data: [] })),
+        api.get<IRoom[]>("/rooms").catch(() => ({ data: [] })),
       ]);
       const rtList: IRoomType[] = Array.isArray(rtRes.data)
         ? rtRes.data
@@ -85,8 +103,13 @@ export function NewReservationModal({
       const guestsList: IGuest[] = Array.isArray(gRes.data)
         ? gRes.data
         : (gRes.data as any)?.data || [];
+      const roomsList: IRoom[] = Array.isArray(roomsRes.data)
+        ? roomsRes.data
+        : (roomsRes.data as any)?.data || [];
 
       setRoomTypes(rtList);
+      setRooms(roomsList);
+
       if (rtList.length > 0 && !selectedRoomTypeId) {
         const firstRt = rtList[0];
         if (firstRt) setSelectedRoomTypeId(firstRt.id);
@@ -107,6 +130,11 @@ export function NewReservationModal({
       setCheckOutDate(getNextDay(newInDate));
     }
   };
+
+  // Rooms matching selected category
+  const categoryRooms = rooms.filter(
+    (r) => !selectedRoomTypeId || r.roomTypeId === selectedRoomTypeId
+  );
 
   // Calculate nights and validation
   const checkInMs = new Date(checkInDate).getTime();
@@ -159,11 +187,13 @@ export function NewReservationModal({
       const inIso = new Date(`${checkInDate}T12:00:00.000Z`).toISOString();
       const outIso = new Date(`${checkOutDate}T12:00:00.000Z`).toISOString();
 
-      await api.post("/reservations", {
+      // 1. Create Reservation with allocated room
+      const res = await api.post("/reservations", {
         bookerGuestId: finalGuestId,
         stays: [
           {
             roomTypeId: selectedRoomTypeId,
+            roomId: selectedRoomId || undefined,
             checkInDate: inIso,
             checkOutDate: outIso,
             adults: Number(adultCount) || 1,
@@ -171,6 +201,21 @@ export function NewReservationModal({
           },
         ],
       });
+
+      // 2. If immediate walk-in check-in is toggled, check in the guest right now
+      if (checkInImmediately && res.data?.stays?.[0]) {
+        const stay = res.data.stays[0];
+        const assignedRoomId = stay.roomId || selectedRoomId;
+        if (assignedRoomId) {
+          try {
+            await api.post(`/reservations/stays/${stay.id}/check-in`, {
+              roomId: assignedRoomId,
+            });
+          } catch (checkInErr) {
+            console.warn("Auto check-in notice:", checkInErr);
+          }
+        }
+      }
 
       onSuccess();
       onClose();
@@ -186,7 +231,7 @@ export function NewReservationModal({
       isOpen={isOpen}
       onClose={onClose}
       title="Create New Reservation"
-      description="Book an upcoming guest stay with instant folio creation"
+      description="Book an upcoming guest stay with instant room allocation & folio creation"
       className="max-w-xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -262,7 +307,7 @@ export function NewReservationModal({
           )}
         </div>
 
-        {/* Room Type Selector */}
+        {/* Room Category Selector */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-800">Room Category</label>
           <div className="grid grid-cols-2 gap-2">
@@ -272,7 +317,14 @@ export function NewReservationModal({
                 <button
                   type="button"
                   key={rt.id}
-                  onClick={() => setSelectedRoomTypeId(rt.id)}
+                  onClick={() => {
+                    setSelectedRoomTypeId(rt.id);
+                    // If assigned room does not belong to this category, reset room selection
+                    const currentRoom = rooms.find((r) => r.id === selectedRoomId);
+                    if (currentRoom && currentRoom.roomTypeId !== rt.id) {
+                      setSelectedRoomId("");
+                    }
+                  }}
                   className={`flex flex-col text-left p-3 rounded-xl border text-xs transition-all ${
                     isSelected
                       ? "border-slate-900 bg-slate-900 text-white shadow-sm"
@@ -292,6 +344,36 @@ export function NewReservationModal({
               );
             })}
           </div>
+        </div>
+
+        {/* Physical Room Allocation */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5 text-slate-500" />
+              <span>Assigned Physical Room (Tape Chart Row)</span>
+            </label>
+            {defaultRoomNumber && selectedRoomId === defaultRoomId && (
+              <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                Pre-selected #{defaultRoomNumber}
+              </span>
+            )}
+          </div>
+          <select
+            value={selectedRoomId}
+            onChange={(e) => setSelectedRoomId(e.target.value)}
+            className="flex h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+          >
+            <option value="">-- Auto-allocate first available room --</option>
+            {categoryRooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                Room #{r.number} (Floor {r.floor} • {r.frontDeskStatus} • {r.housekeepingStatus})
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-slate-400">
+            Select a specific room number or let the system auto-assign an available room in this category.
+          </p>
         </div>
 
         {/* Dates & Guests */}
@@ -353,6 +435,25 @@ export function NewReservationModal({
           </div>
         </div>
 
+        {/* Walk-in Check-in Toggle */}
+        <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100/70 cursor-pointer transition-all">
+          <input
+            type="checkbox"
+            checked={checkInImmediately}
+            onChange={(e) => setCheckInImmediately(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+          />
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              <LogIn className="h-3.5 w-3.5 text-sky-600" />
+              <span>Check in immediately (Walk-in stay)</span>
+            </span>
+            <span className="text-[11px] text-slate-500 mt-0.5">
+              Instantly marks room as <strong>OCCUPIED</strong> and renders the stay card as active <strong>In-House</strong> on the Tape Chart.
+            </span>
+          </div>
+        </label>
+
         {/* Booking Summary Box */}
         <div className="flex items-center justify-between rounded-xl bg-amber-50/70 border border-amber-200/80 p-3.5">
           <div className="flex items-center gap-2">
@@ -386,7 +487,7 @@ export function NewReservationModal({
             className="gap-1.5 font-semibold"
           >
             <CheckCircle2 className="h-4 w-4" />
-            <span>{loading ? "Confirming..." : "Confirm Reservation"}</span>
+            <span>{loading ? "Confirming..." : checkInImmediately ? "Book & Check In" : "Confirm Reservation"}</span>
           </Button>
         </div>
       </form>

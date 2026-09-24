@@ -245,18 +245,20 @@ export default function RoomsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-end">
-                    <button
-                      onClick={() => {
-                        setSelectedRoom(room);
-                        setNewFrontDeskStatus(room.frontDeskStatus);
-                        setNewHkStatus(room.housekeepingStatus);
-                      }}
-                      className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 transition-colors"
-                    >
-                      Update Status →
-                    </button>
-                  </div>
+                  {["ADMIN", "MANAGER", "RECEPTIONIST", "HOUSEKEEPER"].includes(user?.role || "") && (
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setSelectedRoom(room);
+                          setNewFrontDeskStatus(room.frontDeskStatus);
+                          setNewHkStatus(room.housekeepingStatus);
+                        }}
+                        className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 transition-colors"
+                      >
+                        Update Status →
+                      </button>
+                    </div>
+                  )}
                 </Card>
               );
             })}

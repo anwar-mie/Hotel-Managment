@@ -19,8 +19,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
+import { AccessDenied } from "@/components/layout/access-denied";
 import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { hasPermission } from "@/lib/rbac";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { IGuest, IdentificationType } from "shared-types";
 
@@ -58,10 +60,14 @@ export default function GuestsPage() {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user) {
+    if (user && hasPermission(user.role, "guests")) {
       fetchGuests();
+    } else if (user) {
+      setLoading(false);
     }
   }, [user]);
+
+  const isAuthorized = hasPermission(user?.role, "guests");
 
   const handleCreateGuest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,28 +120,35 @@ export default function GuestsPage() {
         <PmsHeader onRefresh={fetchGuests} />
 
         <main className="flex-1 p-6 space-y-5">
-          {/* Header & Title */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-                <Users className="h-5 w-5 text-amber-700" />
-                <span>Guest Profiles & Directory</span>
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Centralized guest history, loyalty tracking, identification records & contact profiles
-              </p>
-            </div>
+          {!isAuthorized ? (
+            <AccessDenied
+              moduleName="Guest Profiles & Directory"
+              allowedRolesDescription="Front Desk Receptionists, Hotel Managers, and System Administrators"
+            />
+          ) : (
+            <>
+              {/* Header & Title */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                    <Users className="h-5 w-5 text-amber-700" />
+                    <span>Guest Profiles & Directory</span>
+                  </h1>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Centralized guest history, loyalty tracking, identification records & contact profiles
+                  </p>
+                </div>
 
-            <Button
-              onClick={() => setIsNewGuestOpen(true)}
-              variant="gold"
-              size="sm"
-              className="font-semibold gap-1.5 shadow-sm"
-            >
-              <UserPlus className="h-4 w-4" />
-              <span>Create Guest Profile</span>
-            </Button>
-          </div>
+                <Button
+                  onClick={() => setIsNewGuestOpen(true)}
+                  variant="gold"
+                  size="sm"
+                  className="font-semibold gap-1.5 shadow-sm"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  <span>Create Guest Profile</span>
+                </Button>
+              </div>
 
           {/* Search bar */}
           <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs flex items-center gap-3">
@@ -242,6 +255,8 @@ export default function GuestsPage() {
               </div>
             )}
           </div>
+          </>
+          )}
         </main>
       </div>
 

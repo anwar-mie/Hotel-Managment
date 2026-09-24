@@ -26,10 +26,12 @@ import { Modal } from "@/components/ui/modal";
 import { NewReservationModal } from "@/components/modals/new-reservation-modal";
 import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { canCreateReservation, canCheckInCheckOut, hasPermission } from "@/lib/rbac";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { IRoom, ICalendarStayItem, IRoomType } from "shared-types";
 
 export default function TapeChartPage() {
+  const { user } = useAuth();
   const [rooms, setRooms] = useState<IRoom[]>([]);
   const [roomTypes, setRoomTypes] = useState<IRoomType[]>([]);
   const [calendarStays, setCalendarStays] = useState<ICalendarStayItem[]>([]);
@@ -52,9 +54,12 @@ export default function TapeChartPage() {
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
   const [selectedCellInfo, setSelectedCellInfo] = useState<{
     roomTypeId?: string;
+    roomId?: string;
+    roomNumber?: string;
     checkIn?: string;
   }>({});
   const [activeStayDetail, setActiveStayDetail] = useState<ICalendarStayItem | null>(null);
+  const [isUpdatingStay, setIsUpdatingStay] = useState(false);
 
   const fetchRoomsAndGrid = async () => {
     try {
@@ -89,8 +94,6 @@ export default function TapeChartPage() {
       setLoading(false);
     }
   };
-
-  const { user } = useAuth();
 
   useEffect(() => {
     if (user) {
@@ -369,12 +372,14 @@ export default function TapeChartPage() {
                                     {stay.reservationCode}
                                   </div>
                                 </button>
-                              ) : (
+                              ) : canCreateReservation(user?.role) ? (
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setSelectedCellInfo({
                                       roomTypeId: room.roomTypeId,
+                                      roomId: room.id,
+                                      roomNumber: room.number,
                                       checkIn: dateStr,
                                     });
                                     setIsNewBookingOpen(true);
@@ -383,6 +388,10 @@ export default function TapeChartPage() {
                                 >
                                   + Book
                                 </button>
+                              ) : (
+                                <div className="w-full h-11 flex items-center justify-center text-[10px] text-slate-300">
+                                  -
+                                </div>
                               )}
                             </td>
                           );
@@ -405,6 +414,8 @@ export default function TapeChartPage() {
           fetchRoomsAndGrid();
         }}
         defaultRoomTypeId={selectedCellInfo.roomTypeId}
+        defaultRoomId={selectedCellInfo.roomId}
+        defaultRoomNumber={selectedCellInfo.roomNumber}
         defaultCheckIn={selectedCellInfo.checkIn}
       />
 
@@ -459,7 +470,7 @@ export default function TapeChartPage() {
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+            <div className="pt-2 flex justify-between items-center gap-2 border-t border-slate-100">
               <Button
                 variant="outline"
                 size="sm"
@@ -467,17 +478,74 @@ export default function TapeChartPage() {
               >
                 Close
               </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  window.location.href = "/front-desk";
-                }}
-                className="gap-1.5 font-semibold text-xs"
-              >
-                <span>Open Front Desk</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
+
+              <div className="flex items-center gap-2">
+                {canCheckInCheckOut(user?.role) && activeStayDetail.status === "SCHEDULED" && (
+                  <Button
+                    variant="emerald"
+                    size="sm"
+                    disabled={isUpdatingStay}
+                    onClick={async () => {
+                      try {
+                        setIsUpdatingStay(true);
+                        await api.post(`/reservations/stays/${activeStayDetail.stayId}/check-in`, {
+                          roomId: activeStayDetail.roomId,
+                        });
+                        setActiveStayDetail(null);
+                        fetchRoomsAndGrid();
+                      } catch (err) {
+                        alert(getErrorMessage(err));
+                      } finally {
+                        setIsUpdatingStay(false);
+                      }
+                    }}
+                    className="gap-1.5 font-semibold text-xs"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>{isUpdatingStay ? "Checking In..." : "Check In Guest"}</span>
+                  </Button>
+                )}
+
+                {canCheckInCheckOut(user?.role) && activeStayDetail.status === "CHECKED_IN" && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={isUpdatingStay}
+                    onClick={async () => {
+                      try {
+                        setIsUpdatingStay(true);
+                        await api.post(`/reservations/stays/${activeStayDetail.stayId}/check-out`, {
+                          notes: "Checked out directly from Tape Chart",
+                        });
+                        setActiveStayDetail(null);
+                        fetchRoomsAndGrid();
+                      } catch (err) {
+                        alert(getErrorMessage(err));
+                      } finally {
+                        setIsUpdatingStay(false);
+                      }
+                    }}
+                    className="gap-1.5 font-semibold text-xs"
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                    <span>{isUpdatingStay ? "Checking Out..." : "Check Out"}</span>
+                  </Button>
+                )}
+
+                {hasPermission(user?.role, "frontDesk") && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => {
+                      window.location.href = "/front-desk";
+                    }}
+                    className="gap-1.5 font-semibold text-xs"
+                  >
+                    <span>Front Desk</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </Modal>

@@ -21,8 +21,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
+import { AccessDenied } from "@/components/layout/access-denied";
 import { api, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { hasPermission, canViewBillingSummary } from "@/lib/rbac";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type {
   IInvoice,
@@ -51,18 +53,25 @@ export default function BillingPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CARD");
   const [submittingPayment, setSubmittingPayment] = useState(false);
 
+  const { user } = useAuth();
+
   const fetchBillingData = async () => {
     try {
       setLoading(true);
       setError(null);
+      const canSeeSummary = canViewBillingSummary(user?.role);
       const [invRes, sumRes, servRes] = await Promise.all([
         api.get<IInvoice[]>("/billing/invoices"),
-        api.get<IBillingSummary>("/billing/invoices/summary"),
+        canSeeSummary
+          ? api.get<IBillingSummary>("/billing/invoices/summary")
+          : Promise.resolve({ data: null }),
         api.get<IService[]>("/billing/services"),
       ]);
 
       setInvoices(Array.isArray(invRes.data) ? invRes.data : (invRes.data as any)?.data || []);
-      setSummary(sumRes.data);
+      if (sumRes && sumRes.data) {
+        setSummary(sumRes.data);
+      }
       setServices(Array.isArray(servRes.data) ? servRes.data : (servRes.data as any)?.data || []);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -71,13 +80,15 @@ export default function BillingPage() {
     }
   };
 
-  const { user } = useAuth();
-
   useEffect(() => {
-    if (user) {
+    if (user && hasPermission(user.role, "billing")) {
       fetchBillingData();
+    } else if (user) {
+      setLoading(false);
     }
   }, [user]);
+
+  const isAuthorized = hasPermission(user?.role, "billing");
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,30 +136,38 @@ export default function BillingPage() {
         <PmsHeader onRefresh={fetchBillingData} />
 
         <main className="flex-1 p-6 space-y-5">
-          {/* Header & Title */}
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-amber-700" />
-              <span>Billing, Invoices & Folio Desk</span>
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Live guest folios, payment processing, ancillary charges settlement & accounts receivable
-            </p>
-          </div>
-
-          {/* Revenue KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Gross Invoiced
-              </span>
-              <div className="text-xl font-extrabold text-slate-900 mt-1">
-                {summary ? formatCurrency(summary.totalInvoiced) : "--"}
+          {!isAuthorized ? (
+            <AccessDenied
+              moduleName="Billing & Folios"
+              allowedRolesDescription="Accountants, Front Desk Receptionists, Hotel Managers, and Administrators"
+            />
+          ) : (
+            <>
+              {/* Header & Title */}
+              <div>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                  <Receipt className="h-5 w-5 text-amber-700" />
+                  <span>Billing, Invoices & Folio Desk</span>
+                </h1>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Live guest folios, payment processing, ancillary charges settlement & accounts receivable
+                </p>
               </div>
-              <span className="text-[11px] text-slate-500 mt-0.5 block">
-                Total stay & service billings
-              </span>
-            </div>
+
+              {/* Revenue KPI Cards (Visible to Management & Accountants) */}
+              {canViewBillingSummary(user?.role) && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Gross Invoiced
+                    </span>
+                    <div className="text-xl font-extrabold text-slate-900 mt-1">
+                      {summary ? formatCurrency(summary.totalInvoiced) : "--"}
+                    </div>
+                    <span className="text-[11px] text-slate-500 mt-0.5 block">
+                      Total stay & service billings
+                    </span>
+                  </div>
 
             <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-4 shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
@@ -186,6 +205,7 @@ export default function BillingPage() {
               </span>
             </div>
           </div>
+        )}
 
           {/* Filter Bar */}
           <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs">
@@ -298,6 +318,8 @@ export default function BillingPage() {
               </tbody>
             </table>
           </div>
+          </>
+          )}
         </main>
       </div>
 

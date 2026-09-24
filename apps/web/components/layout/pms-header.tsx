@@ -5,6 +5,7 @@ import { Plus, Sparkles, AlertCircle, CheckCircle2, BedDouble, RefreshCw } from 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { canCreateReservation } from "@/lib/rbac";
 import type { IRoomStats } from "shared-types";
 
 interface PmsHeaderProps {
@@ -132,7 +133,7 @@ export function PmsHeader({ onOpenNewBooking, onRefresh }: PmsHeaderProps) {
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin text-slate-700" : ""}`} />
         </button>
 
-        {onOpenNewBooking && (
+        {onOpenNewBooking && canCreateReservation(user?.role) && (
           <Button
             onClick={onOpenNewBooking}
             variant="gold"
