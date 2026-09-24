@@ -167,6 +167,26 @@ export class ReservationsService {
         }
 
         roomId = room.id;
+      } else {
+        // Auto-assign first available room of this category so it appears on the Tape Chart grid
+        const availableRoom = await this.prisma.room.findFirst({
+          where: {
+            roomTypeId: stayInput.roomTypeId,
+            frontDeskStatus: { not: 'OUT_OF_ORDER' },
+            stays: {
+              none: {
+                status: { in: ['SCHEDULED', 'CHECKED_IN'] },
+                checkInDate: { lt: checkOut },
+                checkOutDate: { gt: checkIn },
+              },
+            },
+          },
+          orderBy: { number: 'asc' },
+        });
+
+        if (availableRoom) {
+          roomId = availableRoom.id;
+        }
       }
 
       const ratePerNight = stayInput.ratePerNight ?? Number(roomType.basePrice);
