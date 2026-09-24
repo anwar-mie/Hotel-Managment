@@ -146,7 +146,7 @@ export class OperationsController {
 
   @Post('maintenance/requests/:id/start')
   @HttpCode(HttpStatus.OK)
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'HOUSEKEEPER')
   async startMaintenanceRequest(
     @Param('id') id: string,
   ): Promise<IMaintenanceRequest> {
@@ -155,7 +155,7 @@ export class OperationsController {
 
   @Post('maintenance/requests/:id/resolve')
   @HttpCode(HttpStatus.OK)
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'HOUSEKEEPER')
   @UsePipes(new ZodValidationPipe(resolveMaintenanceRequestSchema))
   async resolveMaintenanceRequest(
     @Param('id') id: string,

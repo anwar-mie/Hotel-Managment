@@ -16,7 +16,7 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
         secret:
           configService.get<string>('JWT_SECRET') ?? 'hotel_jwt_super_secret_key_change_in_prod',
         signOptions: {
-          expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ?? '15m') as any,
+          expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ?? '24h') as any,
         },
       }),
     }),
